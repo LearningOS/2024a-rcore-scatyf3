@@ -27,11 +27,12 @@ pub(crate) mod process;
 use fs::*;
 use process::*;
 
-use crate::{task::TASK_MANAGER};
+use crate::{task::TASK_MANAGER, timer::get_time_ms};
 /// handle syscall exception with `syscall_id` and other arguments 
 pub fn syscall(syscall_id: usize , args: [usize; 3]) -> isize {
     trace!("syscall: id is {} and args = {:?}",syscall_id,args);
-    TASK_MANAGER.update_task_info(syscall_id);
+    let called_time = get_time_ms();
+    TASK_MANAGER.update_task_info(syscall_id,called_time);
     match syscall_id {
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),

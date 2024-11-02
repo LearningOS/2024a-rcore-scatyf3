@@ -9,6 +9,8 @@ pub struct TaskControlBlock {
     pub task_info: TaskInfo,
     /// The task context
     pub task_cx: TaskContext,
+    /// start time
+    pub start_time: usize
 }
 
 /// The status of a task
