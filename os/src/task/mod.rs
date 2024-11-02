@@ -54,7 +54,7 @@ lazy_static! {
         let num_app = get_num_app();
         let mut tasks = [TaskControlBlock{
             task_cx: TaskContext::zero_init(),
-            task_info: TaskInfo::default(),
+            task_info: TaskInfo::new(),
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -136,11 +136,18 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
-    /// get current task's contorl block
-    pub fn get_current_task(&self) -> Option<TaskControlBlock> {
-        // TODO 要不要返回索引，或许好，但感觉不太可能？
+    /// get inner control block
+    pub fn get_current_task(&self) -> TaskControlBlock{
         let inner = self.inner.exclusive_access();
-        Some(inner.tasks[inner.current_task])
+        inner.tasks[inner.current_task]
+    }
+    /// update task info according to current task
+    pub fn update_task_info(&self, syscall_id:usize){
+        let mut inner = self.inner.exclusive_access();
+        let current_idx = inner.current_task;
+        inner.tasks[current_idx].task_info.syscall_times[syscall_id]+=1;
+        trace!("current syscall_times_id = {}",inner.tasks[current_idx].task_info.syscall_times[syscall_id]);
+        info!("update taskinfo on current task = {} , syscall_id = {}, syscall times = {}, time = {}",inner.current_task,syscall_id,inner.tasks[current_idx].task_info.syscall_times[syscall_id],inner.tasks[current_idx].task_info.time);
     }
 }
 

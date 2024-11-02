@@ -28,7 +28,7 @@ global_asm!(include_str!("trap.S"));
 
 /// Initialize trap handling
 pub fn init() {
-    trace!("Initialize trap handling");
+    //trace!("Initialize trap handling");
     extern "C" {
         fn __alltraps();
     }
@@ -49,7 +49,7 @@ pub fn enable_timer_interrupt() {
 pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
     let scause = scause::read(); // get trap cause
     let stval = stval::read(); // get extra value
-    trace!("into {:?}", scause.cause());//trace，但是不太知道怎么读到它...
+    //trace!("into {:?}", scause.cause());//trace，但是不太知道怎么读到它...
     match scause.cause() {
         // note:fault是默认写在`riscv::register::scause::Trap`里的，我们貌似看不到它的定义
         Trap::Exception(Exception::UserEnvCall) => {

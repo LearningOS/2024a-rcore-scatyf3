@@ -23,9 +23,9 @@ pub struct TaskInfo {
     pub time: usize,
 }
 
-/// Default init
-impl Default for TaskInfo {
-    fn default() -> Self {
+
+impl TaskInfo {
+    pub fn new() -> Self {
         TaskInfo {
             status: TaskStatus::UnInit, // 或者其他默认状态
             syscall_times: [0; MAX_SYSCALL_NUM], // 初始化为全0数组
@@ -69,9 +69,4 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("[sys_task_info] current task's syscall_times is {:?}",task_info.syscall_times);
     // TODO:error check
     return 0;
-}
-
-pub fn update_task_info(syscall_id: usize , _ti: *mut TaskInfo){
-    let ti_ref: &mut TaskInfo = unsafe { &mut *_ti };
-    ti_ref.syscall_times[syscall_id]+=1;
 }
