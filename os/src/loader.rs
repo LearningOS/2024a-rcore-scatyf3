@@ -69,18 +69,23 @@ pub fn load_apps() {
     }
     let num_app_ptr = _num_app as usize as *const usize;
     let num_app = get_num_app();
+    // num_app + 1 ： 切片长度
+    // num_app_ptr.add(1) 起始地址
+    // `from_raw_parts` 是一个在 `core::slice` 模块中的函数，它接受一个指针和一个长度，并返回一个切片
     let app_start = unsafe { core::slice::from_raw_parts(num_app_ptr.add(1), num_app + 1) };
     // clear i-cache first
     unsafe {
         asm!("fence.i");
     }
     // load apps
+    // 对于每个应用程序
     for i in 0..num_app {
+	    //获得基址
         let base_i = get_base_i(i);
-        // clear region
+        // clear region：清除基址开始，APP_SIZE_LIMIT尺寸的内存空间
         (base_i..base_i + APP_SIZE_LIMIT)
             .for_each(|addr| unsafe { (addr as *mut u8).write_volatile(0) });
-        // load app from data section to memory
+        // load app from data section to memory，加载应用程序
         let src = unsafe {
             core::slice::from_raw_parts(app_start[i] as *const u8, app_start[i + 1] - app_start[i])
         };

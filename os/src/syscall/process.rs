@@ -13,14 +13,25 @@ pub struct TimeVal {
 }
 
 /// Task information
-#[allow(dead_code)]
+#[derive(Copy, Clone)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
-    status: TaskStatus,
+    pub status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// Total running time of task
-    time: usize,
+    pub time: usize,
+}
+
+/// Default init
+impl Default for TaskInfo {
+    fn default() -> Self {
+        TaskInfo {
+            status: TaskStatus::UnInit, // 或者其他默认状态
+            syscall_times: [0; MAX_SYSCALL_NUM], // 初始化为全0数组
+            time: 0,
+        }
+    }
 }
 
 /// task exits and submit an exit code
@@ -52,6 +63,15 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info");
-    -1
+    let task_info :TaskInfo = unsafe {*_ti};
+    trace!("[sys_task_info] current task's status is {:?}",task_info.status);
+    trace!("[sys_task_info] current task's time is {:?}",task_info.time);
+    trace!("[sys_task_info] current task's syscall_times is {:?}",task_info.syscall_times);
+    // TODO:error check
+    return 0;
+}
+
+pub fn update_task_info(syscall_id: usize , _ti: *mut TaskInfo){
+    let ti_ref: &mut TaskInfo = unsafe { &mut *_ti };
+    ti_ref.syscall_times[syscall_id]+=1;
 }

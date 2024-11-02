@@ -15,6 +15,7 @@ const MICRO_PER_SEC: usize = 1_000_000;
 /// Get the current time in ticks
 pub fn get_time() -> usize {
     time::read()
+    // syscall次数+1？
 }
 
 /// get current time in milliseconds
