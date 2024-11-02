@@ -31,7 +31,7 @@ use crate::{task::TASK_MANAGER};
 /// handle syscall exception with `syscall_id` and other arguments 
 pub fn syscall(syscall_id: usize , args: [usize; 3]) -> isize {
     trace!("syscall: id is {} and args = {:?}",syscall_id,args);
-    //let last_time = get_time();
+    TASK_MANAGER.update_task_info(syscall_id);
     match syscall_id {
         SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),
         SYSCALL_EXIT => sys_exit(args[0] as i32),
@@ -40,12 +40,5 @@ pub fn syscall(syscall_id: usize , args: [usize; 3]) -> isize {
         SYSCALL_TASK_INFO => sys_task_info(args[0] as *mut TaskInfo),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     };
-    // 从TASK_MANAGER 根据索引获得tcb，task info => TaskManagerInner current task
-    // 运行时间 time 返回系统调用时刻距离任务第一次被调度时刻的时长，也就是说这个时长可能包含该任务被其他任务抢占后的等待重新调度的时间。
-
-    //TODO 返回ref而不是新建的
-    let current_task = TASK_MANAGER.get_current_task();
-    trace!("Current task status: {:?}", current_task.task_info.status);
-    TASK_MANAGER.update_task_info(syscall_id);
     return 0;
 }

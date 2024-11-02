@@ -1,7 +1,7 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
-    task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
+    task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, TASK_MANAGER},
     timer::get_time_us,
 };
 
@@ -63,10 +63,10 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    let task_info :TaskInfo = unsafe {*_ti};
-    trace!("[sys_task_info] current task's status is {:?}",task_info.status);
-    trace!("[sys_task_info] current task's time is {:?}",task_info.time);
-    trace!("[sys_task_info] current task's syscall_times is {:?}",task_info.syscall_times);
-    // TODO:error check
+    // 查询当前正在执行的任务信息，任务信息包括任务控制块相关信息（任务状态）、任务使用的系统调用及调用次数、系统调用时刻距离任务第一次被调度时刻的时长（单位ms）
+    // 看user/lib.rs 才知道，这里的意思是希望我们把os里的task_info赋值给_ti
+    // 而不是简单的打印出task_info
+    trace!("kernel: sys_task_info");
+    unsafe { *_ti = TASK_MANAGER.get_current_task().task_info};
     return 0;
 }
