@@ -10,7 +10,7 @@ pub struct TaskControlBlock {
     /// The task context
     pub task_cx: TaskContext,
     /// start time
-    pub start_time: usize
+    pub start_time: usize,
 }
 
 /// The status of a task

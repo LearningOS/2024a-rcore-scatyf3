@@ -2,7 +2,7 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, TASK_MANAGER},
-    timer::get_time_us,
+    timer::{get_time_ms,get_time_us},
 };
 
 #[repr(C)]
@@ -52,6 +52,7 @@ pub fn sys_yield() -> isize {
 pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
     let us = get_time_us();
+    trace!("result is {}",us);
     unsafe {
         *ts = TimeVal {
             sec: us / 1_000_000,
@@ -67,6 +68,10 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     // 看user/lib.rs 才知道，这里的意思是希望我们把os里的task_info赋值给_ti
     // 而不是简单的打印出task_info
     trace!("kernel: sys_task_info");
-    unsafe { *_ti = TASK_MANAGER.get_current_task().task_info};
+    let mut task = TASK_MANAGER.get_current_task();
+    task.task_info.time = get_time_ms() - task.start_time;
+    unsafe { 
+        *_ti = task.task_info
+    };
     return 0;
 }

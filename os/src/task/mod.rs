@@ -14,6 +14,8 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
+use core::mem;
+
 use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
@@ -52,16 +54,21 @@ pub struct TaskManagerInner {
 lazy_static! {
     /// Global variable: TASK_MANAGER
     pub static ref TASK_MANAGER: TaskManager = {
+        trace!("TASK MANAGER init");
         let num_app = get_num_app();
         let mut tasks = [TaskControlBlock{
             task_cx: TaskContext::zero_init(),
             task_info: TaskInfo::new(),
-            start_time: get_time_ms(),
+            start_time: 0,
         }; MAX_APP_NUM];
+        trace!("TASK MANAGER change status");
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
             task.task_info.status = TaskStatus::Ready;
         }
+        //[kernel] boot_stack top=bottom=0x80270000, lower_bound=0x80260000
+        //[ INFO] Size of TASK_MANAGER: 34200 (decimal)
+        info!("Size of TASK_MANAGER: {}", mem::size_of::<TaskManager>());
         TaskManager {
             num_app,
             inner: unsafe {
@@ -80,14 +87,19 @@ impl TaskManager {
     /// Generally, the first task in task list is an idle task (we call it zero process later).
     /// But in ch3, we load apps statically, so the first task is a real app.
     fn run_first_task(&self) -> ! {
+        trace!("Run first task id = 0");
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
         task0.task_info.status = TaskStatus::Running;
+        task0.start_time = get_time_ms();
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
         // before this, we should drop local variables that must be dropped manually
+        // context换出一个虚拟上下文
+        // 换入tasks[0]，第一个任务的上下文
         unsafe {
+            trace!("Switch task context");
             __switch(&mut _unused as *mut TaskContext, next_task_cx_ptr);
         }
         panic!("unreachable in run_first_task!");
@@ -124,13 +136,16 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
+            trace!("Run first task id = {}",next);
             inner.tasks[next].task_info.status = TaskStatus::Running;
+            inner.tasks[next].task_info.time = get_time_ms();
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
             drop(inner);
             // before this, we should drop local variables that must be dropped manually
             unsafe {
+                trace!("Switch task context");
                 __switch(current_task_cx_ptr, next_task_cx_ptr);
             }
             // go back to user mode
