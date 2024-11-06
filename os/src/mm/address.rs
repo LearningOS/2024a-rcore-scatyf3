@@ -47,7 +47,7 @@ impl Debug for PhysPageNum {
 /// T: {PhysAddr, VirtAddr, PhysPageNum, VirtPageNum}
 /// T -> usize: T.0
 /// usize -> T: usize.into()
-
+/// 将它们各自抽象出来而不是直接使用 usize，是为了在 Rust 编译器的帮助下进行多种方便且安全的 类型转换 
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
         Self(v & ((1 << PA_WIDTH_SV39) - 1))
@@ -125,6 +125,9 @@ impl From<VirtPageNum> for VirtAddr {
         Self(v.0 << PAGE_SIZE_BITS)
     }
 }
+
+// 对于不对齐的情况，物理地址不能通过 From/Into 转换为物理页号，
+// 而是需要通过它自己的 floor 或 ceil 方法来 进行下取整或上取整的转换。
 impl PhysAddr {
     /// Get the (floor) physical page number
     pub fn floor(&self) -> PhysPageNum {
@@ -157,11 +160,18 @@ impl From<PhysPageNum> for PhysAddr {
 
 impl VirtPageNum {
     /// Get the indexes of the page table entry
+    /// 取出虚拟页号的三级页索引，并按照从高到低的顺序返回
     pub fn indexes(&self) -> [usize; 3] {
+        // 虚拟页号的值
         let mut vpn = self.0;
+        // 储存三个索引
         let mut idx = [0usize; 3];
+        // for 三个索引
         for i in (0..3).rev() {
+            // 511 是二进制的 111111111，意味着提取出最低的 9 位
             idx[i] = vpn & 511;
+            // 将 vpn 右移 9 位，以准备提取下一个索引
+            // 总共27位
             vpn >>= 9;
         }
         idx
@@ -175,17 +185,25 @@ impl PhysAddr {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
     }
 }
+
+// 我们构造可变引用来直接访问一个物理页号 `PhysPageNum` 对应的物理页帧
 impl PhysPageNum {
+
+    // 返回的是一个页表项定长数组的可变引用，可以用来修改多级页表中的一个节点
     /// Get the reference of page table(array of ptes)
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
+        // 在实现方面，都是先把物理页号转为物理地址 PhysAddr ，然后再转成 usize 形式的物理地址
         let pa: PhysAddr = (*self).into();
+        // 接着，我们直接将它 转为裸指针用来访问物理地址指向的物理内存
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
     }
+    // `get_bytes_array` 返回的是一个字节数组的可变引用，可以以字节为粒度对物理页帧上的数据进行访问，前面进行数据清零 就用到了这个方法
     /// Get the reference of page(array of bytes)
     pub fn get_bytes_array(&self) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
         unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, 4096) }
     }
+    // `get_mut` 是个泛型函数，可以获取一个恰好放在一个物理页帧开头的类型为 `T` 的数据的可变引用
     /// Get the mutable reference of physical address
     pub fn get_mut<T>(&self) -> &'static mut T {
         let pa: PhysAddr = (*self).into();

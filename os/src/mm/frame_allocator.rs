@@ -44,12 +44,16 @@ trait FrameAllocator {
     fn dealloc(&mut self, ppn: PhysPageNum);
 }
 /// an implementation for frame allocator
+/// 我们声明一个 FrameAllocator Trait 来描述一个物理页帧管理器需要提供哪些功能
 pub struct StackFrameAllocator {
+    // current-end记录了从未被分配过的物理页号区间
     current: usize,
     end: usize,
+    //以后入先出的方式保存了被回收的物理页号
     recycled: Vec<usize>,
 }
 
+/// 最简单的栈式物理页帧管理策略 StackFrameAllocator
 impl StackFrameAllocator {
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
         self.current = l.0;
@@ -66,10 +70,14 @@ impl FrameAllocator for StackFrameAllocator {
         }
     }
     fn alloc(&mut self) -> Option<PhysPageNum> {
+        // 首先会检查栈 recycled 内有没有之前回收的物理页号，如果有的话直接弹出栈顶并返回
+        // 稍微有点不明白
         if let Some(ppn) = self.recycled.pop() {
             Some(ppn.into())
+        // 检查是否到达分配上线，如果是，分配失败
         } else if self.current == self.end {
             None
+        // 从没有被分配过的内存区分配
         } else {
             self.current += 1;
             Some((self.current - 1).into())
@@ -82,6 +90,7 @@ impl FrameAllocator for StackFrameAllocator {
             panic!("Frame ppn={:#x} has not been allocated!", ppn);
         }
         // recycle
+        // 就是存到recycled的stack上👀
         self.recycled.push(ppn);
     }
 }
@@ -103,6 +112,11 @@ pub fn init_frame_allocator() {
         PhysAddr::from(MEMORY_END).floor(),
     );
 }
+
+
+/// 公开给其他模块的内存分配接口
+
+
 
 /// Allocate a physical page frame in FrameTracker style
 pub fn frame_alloc() -> Option<FrameTracker> {

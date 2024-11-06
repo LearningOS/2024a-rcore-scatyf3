@@ -1,6 +1,7 @@
 //! Loading user applications into memory
 
 /// Get the total number of applications.
+/// get_num_app 获取链接到内核内的应用的数目
 pub fn get_num_app() -> usize {
     extern "C" {
         fn _num_app();
@@ -9,6 +10,7 @@ pub fn get_num_app() -> usize {
 }
 
 /// get applications data
+///  get_app_data 则根据传入的应用编号 取出对应应用的 ELF 格式可执行文件数据
 pub fn get_app_data(app_id: usize) -> &'static [u8] {
     extern "C" {
         fn _num_app();
