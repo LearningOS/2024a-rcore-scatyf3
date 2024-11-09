@@ -13,9 +13,11 @@ mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
+use crate::syscall::process::TaskInfo;
 
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -153,19 +155,24 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    
     /// get inner control block
-    pub fn get_current_task(&self) -> TaskControlBlock{
+    pub fn get_task_info(&self) -> TaskInfo {
         let inner = self.inner.exclusive_access();
-        inner.tasks[inner.current_task]
+        let current_task = &inner.tasks[inner.current_task];
+        TaskInfo {
+            status: current_task.task_status, 
+            syscall_times: current_task.syscall_times,
+            time: current_task.start_time - get_time_ms(),
+        }
     }
     /// update task info according to current task
-    pub fn update_task_info(&self, syscall_id:usize, called_time:usize){
+    pub fn update_task_info(&self, syscall_id:usize){
         let mut inner = self.inner.exclusive_access();
         let current_idx = inner.current_task;
-        inner.tasks[current_idx].task_info.syscall_times[syscall_id]+=1;
-        inner.tasks[current_idx].task_info.time = called_time - inner.tasks[current_idx].start_time;
-        trace!("current syscall_times_id = {}",inner.tasks[current_idx].task_info.syscall_times[syscall_id]);
-        info!("update taskinfo on current task = {} , syscall_id = {}, syscall times = {}, time = {}",inner.current_task,syscall_id,inner.tasks[current_idx].task_info.syscall_times[syscall_id],inner.tasks[current_idx].task_info.time);
+        inner.tasks[current_idx].syscall_times[syscall_id]+=1;
+        trace!("current syscall_times_id = {}",inner.tasks[current_idx].syscall_times[syscall_id]);
+        info!("update taskinfo on current task = {} , syscall_id = {}, syscall times = {}",inner.current_task,syscall_id,inner.tasks[current_idx].syscall_times[syscall_id]);
     }
 }
 

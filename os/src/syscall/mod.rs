@@ -26,7 +26,9 @@ const SYSCALL_MMAP: usize = 222;
 const SYSCALL_TASK_INFO: usize = 410;
 
 mod fs;
-mod process;
+// TODO process设计上应该是private，最好所有交互都通过syscall/mod.rs来进行
+// 但懒得按照最好的软件工程标准来了，先完成再说...
+pub(crate) mod process;
 
 use fs::*;
 use process::*;
