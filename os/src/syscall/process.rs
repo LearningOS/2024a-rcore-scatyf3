@@ -1,9 +1,8 @@
 //! Process management syscalls
 use crate::{
     config::MAX_SYSCALL_NUM,
-    task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
-    },
+    task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, TASK_MANAGER},
+    timer::{get_time_ms,get_time_us},
 };
 
 #[repr(C)]
@@ -14,19 +13,31 @@ pub struct TimeVal {
 }
 
 /// Task information
-#[allow(dead_code)]
+/// 这只是get task info的一个中间结果储存结构体
+/// 它不该被存到TCB里，在任何意味上
+#[derive(Copy, Clone)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
-    status: TaskStatus,
+    pub status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// Total running time of task
-    time: usize,
+    pub time: usize,
+}
+
+impl TaskInfo {
+    pub fn new() -> Self {
+        TaskInfo {
+            status: TaskStatus::UnInit, // 或者其他默认状态
+            syscall_times: [0; MAX_SYSCALL_NUM], // 初始化为全0数组
+            time: 0,
+        }
+    }
 }
 
 /// task exits and submit an exit code
-pub fn sys_exit(_exit_code: i32) -> ! {
-    trace!("kernel: sys_exit");
+pub fn sys_exit(exit_code: i32) -> ! {
+    trace!("[kernel] Application exited with code {}", exit_code);
     exit_current_and_run_next();
     panic!("Unreachable in sys_exit!");
 }
@@ -41,17 +52,35 @@ pub fn sys_yield() -> isize {
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let us = get_time_us();
+    trace!("result is {}",us);
+    unsafe {
+        *ts = TimeVal {
+            sec: us / 1_000_000,
+            usec: us % 1_000_000,
+        };
+    }
+    0
 }
+
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
-/// HINT: What if [`TaskInfo`] is splitted by two pages ?
+/// HINT: What if [`TaskInfo`] is splitted by two pages ? TODO
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+    // 查询当前正在执行的任务信息，任务信息包括任务控制块相关信息（任务状态）、任务使用的系统调用及调用次数、系统调用时刻距离任务第一次被调度时刻的时长（单位ms）
+    // 看user/lib.rs 才知道，这里的意思是希望我们把os里的task_info赋值给_ti
+    // 而不是简单的打印出task_info
+    trace!("kernel: sys_task_info");
+    let mut task_info = TASK_MANAGER.get_task_info();
+    task_info.time = get_time_ms() - task_info.time;
+    unsafe { 
+        (*_ti)=task_info;
+
+    };
+    return 0;
 }
 
 // YOUR JOB: Implement mmap.
@@ -74,3 +103,4 @@ pub fn sys_sbrk(size: i32) -> isize {
         -1
     }
 }
+
