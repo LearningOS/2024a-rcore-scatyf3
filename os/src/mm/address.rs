@@ -3,8 +3,12 @@ use super::PageTableEntry;
 use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
 /// physical address
-const PA_WIDTH_SV39: usize = 56;
-const VA_WIDTH_SV39: usize = 39;
+/// explain: 但是在启用 SV39 分页模式下，只有低 39 位是真正有意义的。 SV39 分页模式规定 64 位虚拟地址的 
+/// [63:39] 这 25 位必须和第 38 位相同，否则 MMU 会直接认定它是一个 不合法的虚拟地址。
+
+
+const PA_WIDTH_SV39: usize = 56; // 物理地址长度
+const VA_WIDTH_SV39: usize = 39; // 虚拟地址长度
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
@@ -93,7 +97,9 @@ impl From<VirtPageNum> for usize {
     }
 }
 /// virtual address impl
+/// 其中 PAGE_SIZE 为 4096， PAGE_SIZE_BITS 为 12 它们均定义在 config 子模块 中，分别表示每个页面的大小和页内偏移的位宽。从物理页号到物理地址的转换只需左移 12 位即可，但是物理地址需要 保证它与页面大小对齐才能通过右移转换为物理页号。
 impl VirtAddr {
+    // 两个helper function，解决不对齐？情况的取地址
     /// Get the (floor) virtual page number
     pub fn floor(&self) -> VirtPageNum {
         VirtPageNum(self.0 / PAGE_SIZE)
@@ -105,6 +111,7 @@ impl VirtAddr {
     }
 
     /// Get the page offset of virtual address
+    /// 取出虚拟地址的页内偏移，其中 PAGE_SIZE - 1 获得mask，和虚拟地址做与操作
     pub fn page_offset(&self) -> usize {
         self.0 & (PAGE_SIZE - 1)
     }
@@ -114,6 +121,7 @@ impl VirtAddr {
         self.page_offset() == 0
     }
 }
+/// 从虚拟地址到虚拟页号，保证对其的情况下才能转换，用floor
 impl From<VirtAddr> for VirtPageNum {
     fn from(v: VirtAddr) -> Self {
         assert_eq!(v.page_offset(), 0);
@@ -147,6 +155,8 @@ impl PhysAddr {
     }
 }
 impl From<PhysAddr> for PhysPageNum {
+    /// 从物理地址到物理页号，保证对齐的情况下才能转换，用floor
+    /// 但没明白为啥floor，这里右移不是不管其他吗
     fn from(v: PhysAddr) -> Self {
         assert_eq!(v.page_offset(), 0);
         v.floor()
@@ -161,6 +171,7 @@ impl From<PhysPageNum> for PhysAddr {
 impl VirtPageNum {
     /// Get the indexes of the page table entry
     /// 取出虚拟页号的三级页索引，并按照从高到低的顺序返回
+    /// 可能有27位，也可能有64-12=52位，但因为在多级页表遍历，只取出低27位
     pub fn indexes(&self) -> [usize; 3] {
         // 虚拟页号的值
         let mut vpn = self.0;
@@ -186,7 +197,7 @@ impl PhysAddr {
     }
 }
 
-// 我们构造可变引用来直接访问一个物理页号 `PhysPageNum` 对应的物理页帧
+// 在内核中应如何访问一个特定的物理页帧
 impl PhysPageNum {
 
     // 返回的是一个页表项定长数组的可变引用，可以用来修改多级页表中的一个节点

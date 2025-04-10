@@ -57,6 +57,8 @@ pub fn enable_timer_interrupt() {
 #[no_mangle]
 pub fn trap_handler() -> ! {
     set_kernel_trap_entry();
+    // 由于应用的 Trap 上下文不在内核地址空间，因此我们调用 current_trap_cx 
+    // 来获取当前应用的 Trap 上下文的可变引用 而不是像之前那样作为参数传入 trap_handler
     let cx = current_trap_cx();
     let scause = scause::read(); // get trap cause
     let stval = stval::read(); // get extra value
@@ -96,7 +98,7 @@ pub fn trap_handler() -> ! {
 }
 
 #[no_mangle]
-/// return to user space
+/// return to user space 返回用户态 TODO
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function

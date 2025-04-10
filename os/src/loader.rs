@@ -1,4 +1,5 @@
 //! Loading user applications into memory
+//! 这里就是mm下改了一堆代码导致的差别，此时所有程序loading可以用一样的虚拟空间
 
 /// Get the total number of applications.
 /// get_num_app 获取链接到内核内的应用的数目
@@ -11,6 +12,7 @@ pub fn get_num_app() -> usize {
 
 /// get applications data
 ///  get_app_data 则根据传入的应用编号 取出对应应用的 ELF 格式可执行文件数据
+/// 它们和之前一样仍是基于 build.rs 生成的 link_app.S 给出的符号来 确定其位置，并实际放在内核的数据段中
 pub fn get_app_data(app_id: usize) -> &'static [u8] {
     extern "C" {
         fn _num_app();

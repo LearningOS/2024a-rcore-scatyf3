@@ -30,6 +30,9 @@ extern "C" {
 
 lazy_static! {
     /// The kernel's initial memory mapping(kernel address space)
+    /// 创建内核地址空间的全局实例
+    /// KERNEL_SPACE 在运行期间它第一次被用到时才会实际进行初始化，而它所 占据的空间则是编译期被放在全局数据段中。 
+    /// Arc<UPSafeCell<_>> 同时带来 Arc<T> 提供的共享 引用，和 UPSafeCell<T> 提供的互斥访问。
     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
@@ -41,6 +44,7 @@ pub struct MemorySet {
     page_table: PageTable,
     // 逻辑段 MapArea 的向量 areas
     // 每个 MapArea下则挂着对应[逻辑段中的数据所在的物理页帧]，即地址里用户程序相关数据
+    // for RAII
     areas: Vec<MapArea>,
 }
 
@@ -58,15 +62,15 @@ impl MemorySet {
         self.page_table.token()
     }
     /// Assume that no conflicts.
-    /// 在当前地址空间插入一个 Framed 方式映射到 物理内存的逻辑段
+    /// 用 push ，可以在当前地址空间插入一个 Framed 方式映射到 物理内存的逻辑段
+    /// 注意该方法的调用者要保证同一地址空间内的任意两个逻辑段不能存在交集，
+    /// 从后面即将分别介绍的内核和 应用的地址空间布局可以看出这一要求得到了保证
     pub fn insert_framed_area(
         &mut self,
         start_va: VirtAddr,
         end_va: VirtAddr,
         permission: MapPermission,
     ) {
-        // 注意该方法的调用者要保证[同一地址空间内的任意两个逻辑段不能存在交集]
-        // 调用push
         self.push(
             MapArea::new(start_va, end_va, MapType::Framed, permission),
             None,
@@ -77,7 +81,8 @@ impl MemorySet {
     /// 还可以可选地在那些被映射到的物理页帧上写入一些初始化数据 data
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         // 将当前对象的page_table传给map_area
-        // 回忆，一个MemorySet对应多个MapArea
+        // 回忆，一个MemorySet对应多个MapArea，
+        // 比如经典的一个程序的四个段
         map_area.map(&mut self.page_table);
         // 还可以可选地在那些被映射到的物理页帧上写入一些初始化数据 data
         if let Some(data) = data {
@@ -97,11 +102,16 @@ impl MemorySet {
     }
     /// Without kernel stacks.
     /// 生成内核的地址空间
+    /// 在本章之前，内核和应用代码的访存地址都被视为一个物理地址直接访问物理内存，
+    /// 而在分页模式开启之后，它们都需要通过 MMU 的 地址转换变成物理地址再交给 CPU 的访存单元去访问物理内存。
+    /// 这里也是本章让我们需要修改内容的起始点，根据访存方式不同修改程序
     pub fn new_kernel() -> Self {
+        // 为kernel创建一个内存空间
         let mut memory_set = Self::new_bare();
         // map trampoline
         // 第一步，在内核空间的最高层生成跳板
         memory_set.map_trampoline();
+        // 接下来则是从高到低放置每个应用的内核栈，但没见代码？
         // map kernel sections
         // 打印kernel各段尺寸
         info!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
@@ -111,6 +121,7 @@ impl MemorySet {
             ".bss [{:#x}, {:#x})",
             sbss_with_stack as usize, ebss as usize
         );
+        // 上面还有个available physical frames，在哪里呢？
         // text段，stext~etext
         info!("mapping .text section");
         memory_set.push(
@@ -265,10 +276,14 @@ impl MemorySet {
         )
     }
     /// Change page table by writing satp CSR Register.
+    /// 
     pub fn activate(&self) {
-        let satp = self.page_table.token();
+        let satp = self.page_table.token(); // 写入satp，开启SV39分页模式
+        // 启用之后，需要平滑的切换到新页表，aka在切换 satp 时，前后两条指令的虚拟地址和物理地址应保持相邻
+        // 它可以做到这一点，在切换之后是一个恒等映射， 而在切换之前是视为物理地址直接取指，也可以将其看成一个恒等映射
         unsafe {
             satp::write(satp);
+            // 写入之后，接一个asm指令，清空TLB
             asm!("sfence.vma");
         }
     }
@@ -308,18 +323,20 @@ impl MemorySet {
 }
 /// map area structure, controls a contiguous piece of virtual memory
 /// 逻辑段，一段实际可用的地址连续的虚拟地址空间
+/// 就是所谓一个程序的地址空间
 pub struct MapArea {
-    // 一段虚拟页号的连续区间,是iter
+    // 一段虚拟页号的连续区间,是iter, 可以使用 Rust 的语法糖 for-loop 进行迭代
     vpn_range: VPNRange,
     // 如果采用frame
-    // data_frames 是一个保存了该逻辑段内的每个虚拟页面 和它被映射到的物理页帧 FrameTracker 的一个键值对容器 BTreeMap 中
-    // 这些物理页帧被用来存放【实际内存数据而不是作为多级页表中的中间节点】
-    // TODO: 这里意思是保存物理页号吗，有点没看懂
+    // data_frames 是一个保存了该逻辑段内的每个虚拟页面 
+    // 和它被映射到的物理页帧 FrameTracker 的一个键值对容器 BTreeMap 中
+    // 这些物理页帧被用来存放实际内存数据而不是作为多级页表中的中间节点
     // 这也用到了 RAII 的思想，将这些物理页帧的生命周期绑定到它所在的逻辑段 MapArea 下，当逻辑段被回收之后这些之前分配的物理页帧也会自动地同时被回收。
-    data_frames: BTreeMap<VirtPageNum, FrameTracker>,
+    data_frames: BTreeMap<VirtPageNum, FrameTracker>, // FrameTracker是对物理地址的一层包装
     // MapType 描述该逻辑段内的所有虚拟页面映射到物理页帧的同一种方式
-    // 它是一个枚举类型，在内核当前的实现中支持两种方式
+    // 它是一个枚举类型，在内核当前的实现中支持两种方式，恒等映射和 framed 映射
     map_type: MapType,
+    // 它是页表项标志位 PTEFlags 的一个子集，仅保留 U/R/W/X 四个标志位
     map_perm: MapPermission,
 }
 
@@ -342,6 +359,7 @@ impl MapArea {
         }
     }
     /// 对单个虚拟页面映射/解映射
+    /// 将一个已知的页号插入表格
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         // 物理页号则取决于当前逻辑段映射到物理内存的方式
@@ -357,6 +375,7 @@ impl MapArea {
                 // 此时页表项中的物理页号自然就是 这个被分配的物理页帧的物理页号
                 ppn = frame.ppn;
                 // 还需要将这个物理页帧挂在逻辑段的 data_frames 字段下
+                // aka虚拟页号到物理页号的映射
                 self.data_frames.insert(vpn, frame);
             }
         }

@@ -13,6 +13,7 @@ mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
+use crate::mm::{MemorySet, VirtAddr};
 use crate::syscall::process::TaskInfo;
 
 use crate::loader::{get_app_data, get_num_app};
@@ -52,6 +53,7 @@ struct TaskManagerInner {
 
 lazy_static! {
     /// a `TaskManager` global instance through lazy_static!
+    /// 将所有的应用加载到全局应用管理器中
     pub static ref TASK_MANAGER: TaskManager = {
         println!("init TASK_MANAGER");
         let num_app = get_num_app();
@@ -174,6 +176,18 @@ impl TaskManager {
         trace!("current syscall_times_id = {}",inner.tasks[current_idx].syscall_times[syscall_id]);
         info!("update taskinfo on current task = {} , syscall_id = {}, syscall times = {}",inner.current_task,syscall_id,inner.tasks[current_idx].syscall_times[syscall_id]);
     }
+    /// 对当前的任务，增加
+    pub fn append_memory_to_cur_task_memspace(&self,_start: VirtAddr, _len: usize, _port: usize) {
+        // 使用 UPSafeCell 获取可变引用
+        let inner = self.inner.exclusive_access();
+        let index = inner.current_task;
+        let tcb = &inner.tasks[index];
+        let cur_task_memset = &tcb.memory_set;
+        let end_addr = _start + _len; // TODO
+        cur_task_memset.append_to(_start, _start+_len);
+        
+        
+    }
 }
 
 /// Run the first task in task list.
@@ -222,4 +236,8 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+pub fn append_memory_to_cur_task_memspace(_start: VirtAddr, _len: usize, _port: usize) {
+    TASK_MANAGER.append_memory_to_cur_task_memspace(_start,_len,_port);
 }

@@ -1,53 +1,46 @@
-# rCore-Camp-Code-2024A
-
-### Code
-- [Soure Code of labs for 2024A](https://github.com/LearningOS/rCore-Camp-Code-2024A)
-### Documents
-
-- Concise Manual: [rCore-Camp-Guide-2024A](https://LearningOS.github.io/rCore-Camp-Guide-2024A/)
-
-- Detail Book [rCore-Tutorial-Book-v3](https://rcore-os.github.io/rCore-Tutorial-Book-v3/)
 
 
-### OS API docs
-- [ch1](https://learningos.github.io/rCore-Camp-Code-2024A/ch1/os/index.html) [ch2](https://learningos.github.io/rCore-Camp-Code-2024A/ch2/os/index.html) [ch3](https://learningos.github.io/rCore-Camp-Code-2024A/ch3/os/index.html) [ch4](https://learningos.github.io/rCore-Camp-Code-2024A/ch4/os/index.html)
-- [ch5](https://learningos.github.io/rCore-Camp-Code-2024A/ch5/os/index.html) [ch6](https://learningos.github.io/rCore-Camp-Code-2024A/ch6/os/index.html) [ch7](https://learningos.github.io/rCore-Camp-Code-2024A/ch7/os/index.html) [ch8](https://learningos.github.io/rCore-Camp-Code-2024A/ch8/os/index.html)
-
-
-### Related Resources
-- [Learning Resource](https://github.com/LearningOS/rust-based-os-comp2022/blob/main/relatedinfo.md)
-
-
-### Build & Run
-
-Replace `<YourName>` with your github ID, and replace `<Number>` with the chapter ID.
-
-Notice: `<Number>` is chosen from `[1,2,3,4,5,6,7,8]`
-
-```bash
-# 
-$ git clone git@github.com:LearningOS/2024a-rcore-<YourName>
-$ cd 2024a-rcore-<YourName>
-$ git clone git@github.com:LearningOS/rCore-Tutorial-Test-2024A user
-$ git checkout ch<Number>
-$ cd os
-$ make run
+项目结构
+```
+├── os
+│   ├── ...
+│   └── src
+│       ├── ...
+│       ├── config.rs(修改：新增一些内存管理的相关配置)
+│       ├── linker.ld(修改：将跳板页引入内存布局)
+│       ├── loader.rs(修改：仅保留获取应用数量和数据的功能)
+│       ├── main.rs(修改)
+│       ├── mm(新增：内存管理的 mm 子模块)
+│       │   ├── address.rs(物理/虚拟 地址/页号的 Rust 抽象)
+│       │   ├── frame_allocator.rs(物理页帧分配器)
+│       │   ├── heap_allocator.rs(内核动态内存分配器)
+│       │   ├── memory_set.rs(引入地址空间 MemorySet 及逻辑段 MemoryArea 等)
+│       │   ├── mod.rs(定义了 mm 模块初始化方法 init)
+│       │   └── page_table.rs(多级页表抽象 PageTable 以及其他内容)
+│       ├── syscall
+│       │   ├── fs.rs(修改：基于地址空间的 sys_write 实现)
+│       │   ├── mod.rs
+│       │   └── process.rs
+│       ├── task
+│       │   ├── context.rs(修改：构造一个跳转到不同位置的初始任务上下文)
+│       │   ├── mod.rs(修改，详见文档)
+│       │   ├── switch.rs
+│       │   ├── switch.S
+│       │   └── task.rs(修改，详见文档)
+│       └── trap
+│           ├── context.rs(修改：在 Trap 上下文中加入了更多内容)
+│           ├── mod.rs(修改：基于地址空间修改了 Trap 机制，详见文档)
+│           └── trap.S(修改：基于地址空间修改了 Trap 上下文保存与恢复汇编代码)
+└── user
+    ├── build.py(编译时不再使用)
+    ├── ...
+    └── src
+        ├── linker.ld(修改：将所有应用放在各自地址空间中固定的位置)
+        └── ...
 ```
 
-### Grading
-
-Replace `<YourName>` with your github ID, and replace `<Number>` with the chapter ID.
-
-Notice: `<Number>` is chosen from `[3,4,5,6,8]`
-
-```bash
-# Replace <YourName> with your github ID 
-$ git clone git@github.com:LearningOS/2024a-rcore-<YourName>
-$ cd 2024a-rcore-<YourName>
-$ rm -rf ci-user
-$ git clone git@github.com:LearningOS/rCore-Tutorial-Checker-2024A ci-user
-$ git clone git@github.com:LearningOS/rCore-Tutorial-Test-2024A ci-user/user
-$ git checkout ch<Number>
-$ cd ci-user
-$ make test CHAPTER=<Number>
+satp寄存器，mmu用的，mode控制开关
+```
+| 63 - 60 | 59 - 48 | 47 - 0  |
+|   MODE  |   ASID  |   PPN   |
 ```

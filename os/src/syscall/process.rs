@@ -1,4 +1,8 @@
 //! Process management syscalls
+use alloc::task;
+// use riscv::addr::VirtAddr;
+use crate::mm::VirtAddr;
+use crate::task::append_memory_to_cur_task_memspace;
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, TASK_MANAGER},
@@ -70,23 +74,20 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ? TODO
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    // 查询当前正在执行的任务信息，任务信息包括任务控制块相关信息（任务状态）、任务使用的系统调用及调用次数、系统调用时刻距离任务第一次被调度时刻的时长（单位ms）
-    // 看user/lib.rs 才知道，这里的意思是希望我们把os里的task_info赋值给_ti
-    // 而不是简单的打印出task_info
     trace!("kernel: sys_task_info");
-    let mut task_info = TASK_MANAGER.get_task_info();
-    task_info.time = get_time_ms() - task_info.time;
-    unsafe { 
-        (*_ti)=task_info;
+    
 
-    };
     return 0;
 }
 
 // YOUR JOB: Implement mmap.
+// 申请长度为 len 字节的物理内存（不要求实际物理内存位置，可以随便找一块），将其映射到 start 开始的虚存，内存页属性为 port
+// 等等，usize和虚拟地址的关系是啥？
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    let virt_addr_start: VirtAddr  = VirtAddr::from(_start);
+    append_memory_to_cur_task_memspace(virt_addr_start, _len, _port);
+    0
 }
 
 // YOUR JOB: Implement munmap.

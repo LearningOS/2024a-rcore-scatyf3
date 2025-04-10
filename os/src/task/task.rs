@@ -15,12 +15,16 @@ pub struct TaskControlBlock {
     pub task_status: TaskStatus,
 
     /// Application address space
+    /// 应用的地址空间
     pub memory_set: MemorySet,
 
     /// The phys page number of trap context
+    /// 位于应用地址空间次高页的 Trap 上下文被实际存放在物理页帧的物理页号 trap_cx_ppn ，
+    /// 它能够方便我们对于 Trap 上下文进行访问
     pub trap_cx_ppn: PhysPageNum,
 
     /// The size(top addr) of program which is loaded from elf file
+    /// base_size 统计了应用数据的大小，也就是 在应用地址空间中从 0x0 开始到用户栈结束一共包含多少字节
     pub base_size: usize,
 
     /// Heap bottom
@@ -49,13 +53,18 @@ impl TaskControlBlock {
     /// Based on the elf info in program, build the contents of task in a new address space
     pub fn new(elf_data: &[u8], app_id: usize) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
+        // 解析传入的 ELF 格式数据构造应用的地址空间 memory_set 并获得其他信息
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        // 我们从地址空间 memory_set 中查多级页表找到应用地址空间中的 Trap 上下文实际被放在哪个物理页帧；
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(TRAP_CONTEXT_BASE).into())
             .unwrap()
             .ppn();
         let task_status = TaskStatus::Ready;
         // map a kernel-stack in kernel space
+        // 我们根据传入的应用 ID app_id 调用在 config 子模块中定义的 kernel_stack_position 
+        // 找到 应用的内核栈预计放在内核地址空间 KERNEL_SPACE 中的哪个位置，
+        // 并通过 insert_framed_area 实际将这个逻辑段 加入到内核地址空间中
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(app_id);
         KERNEL_SPACE.exclusive_access().insert_framed_area(
             kernel_stack_bottom.into(),
