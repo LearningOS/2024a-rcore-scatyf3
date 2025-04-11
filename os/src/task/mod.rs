@@ -13,7 +13,7 @@ mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
-use crate::mm::{MemorySet, VirtAddr};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::syscall::process::TaskInfo;
 
 use crate::loader::{get_app_data, get_num_app};
@@ -176,17 +176,26 @@ impl TaskManager {
         trace!("current syscall_times_id = {}",inner.tasks[current_idx].syscall_times[syscall_id]);
         info!("update taskinfo on current task = {} , syscall_id = {}, syscall times = {}",inner.current_task,syscall_id,inner.tasks[current_idx].syscall_times[syscall_id]);
     }
-    /// 对当前的任务，增加
-    pub fn append_memory_to_cur_task_memspace(&self,_start: VirtAddr, _len: usize, _port: usize) {
+    /// 对当前的任务，增加一段虚拟内存空间
+    pub fn append_memory_to_cur_task_memspace(&self,_start: VirtAddr,_end: VirtAddr, _port: usize) -> isize {
         // 使用 UPSafeCell 获取可变引用
-        let inner = self.inner.exclusive_access();
+        let mut inner = self.inner.exclusive_access();
         let index = inner.current_task;
-        let tcb = &inner.tasks[index];
-        let cur_task_memset = &tcb.memory_set;
-        let end_addr = _start + _len; // TODO
-        cur_task_memset.append_to(_start, _start+_len);
-        
-        
+        let perm = MapPermission::from_bits(_port as u8).unwrap();
+        inner.tasks[index].memory_set.insert_framed_area(_start, _end,perm); // 这里的错误信息怎么返回？
+        0
+    }
+    /// 从当前的内存空间里删除一段完整的内存区域
+    pub fn unmap_memory_to_cur_task_space(&self,_start: VirtAddr,_end: VirtAddr) -> isize {
+        // 使用 UPSafeCell 获取可变引用
+        let mut inner = self.inner.exclusive_access();
+        let index = inner.current_task;
+        // TODO ，start是新的end，但原内存的start在哪里
+        if inner.tasks[index].memory_set.remove_map_area(_start){
+            return 0;
+        }else{
+            return -1;
+        }
     }
 }
 
@@ -238,6 +247,12 @@ pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
 }
 
-pub fn append_memory_to_cur_task_memspace(_start: VirtAddr, _len: usize, _port: usize) {
-    TASK_MANAGER.append_memory_to_cur_task_memspace(_start,_len,_port);
+/// 创建并映射一段虚拟内存
+pub fn append_memory_to_cur_task_memspace(_start: VirtAddr, _end: VirtAddr, _port: usize) -> isize {
+    TASK_MANAGER.append_memory_to_cur_task_memspace(_start,_end,_port)
+}
+
+/// 取消一段虚拟内存
+pub fn unmap_memory_to_cur_task_space(_start: VirtAddr, _end: VirtAddr) -> isize {
+    TASK_MANAGER.unmap_memory_to_cur_task_space(_start,_end)
 }

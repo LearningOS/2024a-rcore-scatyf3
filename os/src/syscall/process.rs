@@ -1,12 +1,11 @@
 //! Process management syscalls
-use alloc::task;
 // use riscv::addr::VirtAddr;
 use crate::mm::VirtAddr;
-use crate::task::append_memory_to_cur_task_memspace;
+use crate::task::{append_memory_to_cur_task_memspace, unmap_memory_to_cur_task_space};
 use crate::{
     config::MAX_SYSCALL_NUM,
-    task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus, TASK_MANAGER},
-    timer::{get_time_ms,get_time_us},
+    task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
+    timer::get_time_us,
 };
 
 #[repr(C)]
@@ -84,16 +83,39 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 // 申请长度为 len 字节的物理内存（不要求实际物理内存位置，可以随便找一块），将其映射到 start 开始的虚存，内存页属性为 port
 // 等等，usize和虚拟地址的关系是啥？
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    trace!("kernel: sys_mmap");
     let virt_addr_start: VirtAddr  = VirtAddr::from(_start);
-    append_memory_to_cur_task_memspace(virt_addr_start, _len, _port);
-    0
+    let virt_addr_end: VirtAddr  = VirtAddr::from(_start+_len);
+    // check
+    // check start 没有按页大小对齐
+    if virt_addr_start.page_offset() != 0 {
+        return -1;
+    }
+    // check port 第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
+    // 检查port其他位是否有非0
+    if _port & !0x7 != 0{
+        return -1;
+    }
+    // 如果读写执行都不可以，这样一段内存没有意义
+    if _port & 0x7 == 0 {
+        return -1;
+    }
+    // [start, start + len) 中存在已经被映射的页，丢给os内核部分检查
+    append_memory_to_cur_task_memspace(virt_addr_start, virt_addr_end, _port)
 }
 
 // YOUR JOB: Implement munmap.
+// 取消到 [start, start + len) 虚存的映射。特别地，在 rCore 课程实验中，正确执行的 sys_munmap 仅会对应 唯一且完整 的 mmap 区间，不考虑交叉、截断区间的情况。
+// 参数和返回值请参考 mmap
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    trace!("kernel: sys_munmap");
+    let virt_addr_start: VirtAddr  = VirtAddr::from(_start);
+    let virt_addr_end: VirtAddr  = VirtAddr::from(_start+_len);
+    if virt_addr_start.page_offset() != 0 {
+        return -1;
+    }
+    unmap_memory_to_cur_task_space(virt_addr_start, virt_addr_end)
+
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
