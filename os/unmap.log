@@ -1,0 +1,6 @@
+(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add riscv64gc-unknown-none-elf
+riscv64gc-unknown-none-elf (installed)
+cargo install cargo-binutils
+rustup component add rust-src
+rustup component add llvm-tools-preview
+target/riscv64gc-unknown-none-elf/release/ch3_sleep target/riscv64gc-unknown-none-elf/release/ch3_sleep1 target/riscv64gc-unknown-none-elf/release/ch3_taskinfo target/riscv64gc-unknown-none-elf/release/ch4_mmap0 target/riscv64gc-unknown-none-elf/release/ch4_mmap1 target/riscv64gc-unknown-none-elf/release/ch4_mmap2 target/riscv64gc-unknown-none-elf/release/ch4_mmap3 target/riscv64gc-unknown-none-elf/release/ch4_unmap target/riscv64gc-unknown-none-elf/release/ch4_unmap2

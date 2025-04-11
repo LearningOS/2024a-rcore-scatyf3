@@ -224,3 +224,14 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     }
     v
 }
+
+
+/// 用于sys_get_time和sys_task_info，翻译里面的虚拟地址指针到物理地址指针
+pub fn translated_ptr(token: usize,ptr:usize) -> usize {
+    let page_table = PageTable::from_token(token);
+    let start = ptr;
+    let start_va = VirtAddr::from(start);
+    let vpn = start_va.floor();
+    let ppn = page_table.translate(vpn).unwrap().ppn();
+    return usize::from(ppn) << 12 | start_va.page_offset();
+} 

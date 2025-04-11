@@ -13,8 +13,8 @@ mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
-use crate::mm::{MemorySet, VirtAddr};
-use crate::syscall::process::TaskInfo;
+use crate::mm::{MapPermission, VirtAddr};
+use crate::syscall::process::{self, TaskInfo};
 
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
@@ -83,6 +83,8 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+        next_task.start_time = get_time_ms();
+        trace!("next task start time = {}",next_task.start_time);
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -144,6 +146,10 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            if inner.tasks[next].start_time==0{
+                trace!("next task start time = {}",get_time_ms());
+                inner.tasks[next].start_time = get_time_ms();
+            }
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -162,31 +168,55 @@ impl TaskManager {
     pub fn get_task_info(&self) -> TaskInfo {
         let inner = self.inner.exclusive_access();
         let current_task = &inner.tasks[inner.current_task];
+        trace!("current task start time is {}",current_task.start_time);
+        trace!("cur time is {}",get_time_ms());
         TaskInfo {
             status: current_task.task_status, 
             syscall_times: current_task.syscall_times,
-            time: current_task.start_time - get_time_ms(),
+            time: get_time_ms() - current_task.start_time,
         }
     }
     /// update task info according to current task
     pub fn update_task_info(&self, syscall_id:usize){
         let mut inner = self.inner.exclusive_access();
         let current_idx = inner.current_task;
+        // inner.tasks[current_idx].start_time = get_time_ms();
         inner.tasks[current_idx].syscall_times[syscall_id]+=1;
         trace!("current syscall_times_id = {}",inner.tasks[current_idx].syscall_times[syscall_id]);
         info!("update taskinfo on current task = {} , syscall_id = {}, syscall times = {}",inner.current_task,syscall_id,inner.tasks[current_idx].syscall_times[syscall_id]);
     }
-    /// 对当前的任务，增加
-    pub fn append_memory_to_cur_task_memspace(&self,_start: VirtAddr, _len: usize, _port: usize) {
+    /// 对当前的任务，增加一段虚拟内存空间
+    pub fn append_memory_to_cur_task_memspace(&self,_start: VirtAddr,_end: VirtAddr, _port: usize) -> isize {
         // 使用 UPSafeCell 获取可变引用
-        let inner = self.inner.exclusive_access();
+        let mut inner = self.inner.exclusive_access();
         let index = inner.current_task;
-        let tcb = &inner.tasks[index];
-        let cur_task_memset = &tcb.memory_set;
-        let end_addr = _start + _len; // TODO
-        cur_task_memset.append_to(_start, _start+_len);
-        
-        
+        trace!("_port={}", _port);
+        let mut perm = MapPermission::empty();
+        perm.set(MapPermission::R, _port & 0x1 != 0);
+        perm.set(MapPermission::W, _port & 0x2 != 0);
+        perm.set(MapPermission::X, _port & 0x4 != 0);
+        perm.set(MapPermission::U, true);
+        trace!("append memory {:?}:{:?} to cur task space",_start,_end);
+        // check这段内存是否已经被映射
+        if inner.tasks[index].memory_set.check_map_area_overlap(_start, _end) {
+            return -1;
+        }
+        inner.tasks[index].memory_set.insert_framed_area(_start, _end,perm);
+        return 0;
+    }
+    /// 从当前的内存空间里删除一段完整的内存区域
+    pub fn unmap_memory_to_cur_task_space(&self,_start: VirtAddr,_end: VirtAddr) -> isize {
+        // 使用 UPSafeCell 获取可变引用
+        let mut inner = self.inner.exclusive_access();
+        let index = inner.current_task;
+        trace!("unmap memory {:?}:{:?} to cur task space",_start,_end);
+        // 必须全部overlap，才能 unmap
+        if inner.tasks[index].memory_set.check_map_area_equal(_start, _end){
+            inner.tasks[index].memory_set.remove_map_area(_start);
+            return 0;
+        }else{
+            return -1;
+        }
     }
 }
 
@@ -238,6 +268,22 @@ pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
 }
 
-pub fn append_memory_to_cur_task_memspace(_start: VirtAddr, _len: usize, _port: usize) {
-    TASK_MANAGER.append_memory_to_cur_task_memspace(_start,_len,_port);
+/// 创建并映射一段虚拟内存
+pub fn append_memory_to_cur_task_memspace(_start: VirtAddr, _end: VirtAddr, _port: usize) -> isize {
+    TASK_MANAGER.append_memory_to_cur_task_memspace(_start,_end,_port)
+}
+
+/// 取消一段虚拟内存
+pub fn unmap_memory_to_cur_task_space(_start: VirtAddr, _end: VirtAddr) -> isize {
+    TASK_MANAGER.unmap_memory_to_cur_task_space(_start,_end)
+}
+
+/// 获取人物信息
+pub fn get_current_task() -> process::TaskInfo {
+    return TASK_MANAGER.get_task_info();
+}
+
+/// 更新人物信息
+pub fn update_task_info(syscall_id: usize){
+    return TASK_MANAGER.update_task_info(syscall_id);
 }
