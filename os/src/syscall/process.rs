@@ -1,8 +1,8 @@
 //! Process management syscalls
-
 use crate::mm::VirtAddr;
 use crate::mm::page_table::translated_ptr;
-use crate::task::{append_memory_to_cur_task_memspace, current_user_token, unmap_memory_to_cur_task_space};
+use crate::task::{append_memory_to_cur_task_memspace, current_user_token, get_current_task, unmap_memory_to_cur_task_space};
+use crate::timer::get_time_ms;
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
@@ -77,7 +77,12 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ? TODO
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    
+    let mut task = get_current_task();
+    task.time = get_time_ms() - task.time;
+    let _ti = translated_ptr(current_user_token(), _ti as usize) as *mut TaskInfo;
+    unsafe { 
+        *_ti = task;
+    };
 
     return 0;
 }
@@ -96,6 +101,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     }
     // check port 第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
     // 检查port其他位是否有非0
+    // 0x7=0x111
     if _port & !0x7 != 0{
         return -1;
     }

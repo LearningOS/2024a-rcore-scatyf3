@@ -14,7 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 use crate::mm::{MapPermission, VirtAddr};
-use crate::syscall::process::TaskInfo;
+use crate::syscall::process::{self, TaskInfo};
 
 use crate::loader::{get_app_data, get_num_app};
 use crate::sync::UPSafeCell;
@@ -181,9 +181,18 @@ impl TaskManager {
         // 使用 UPSafeCell 获取可变引用
         let mut inner = self.inner.exclusive_access();
         let index = inner.current_task;
-        let perm = MapPermission::from_bits(_port as u8).unwrap();
-        inner.tasks[index].memory_set.insert_framed_area(_start, _end,perm); // 这里的错误信息怎么返回？
-        0
+        trace!("_port={}", _port);
+        let mut perm = MapPermission::empty();
+        perm.set(MapPermission::R, _port & 0x1 != 0);
+        perm.set(MapPermission::W, _port & 0x2 != 0);
+        perm.set(MapPermission::X, _port & 0x4 != 0);
+        perm.set(MapPermission::U, true);
+        if inner.tasks[index].memory_set.insert_framed_area(_start, _end,perm){
+            return 0;
+        }else{
+            return -1;
+        }
+
     }
     /// 从当前的内存空间里删除一段完整的内存区域
     pub fn unmap_memory_to_cur_task_space(&self,_start: VirtAddr,_end: VirtAddr) -> isize {
@@ -255,4 +264,14 @@ pub fn append_memory_to_cur_task_memspace(_start: VirtAddr, _end: VirtAddr, _por
 /// 取消一段虚拟内存
 pub fn unmap_memory_to_cur_task_space(_start: VirtAddr, _end: VirtAddr) -> isize {
     TASK_MANAGER.unmap_memory_to_cur_task_space(_start,_end)
+}
+
+/// 获取人物信息
+pub fn get_current_task() -> process::TaskInfo {
+    return TASK_MANAGER.get_task_info();
+}
+
+/// 更新人物信息
+pub fn update_task_info(syscall_id: usize){
+    return TASK_MANAGER.update_task_info(syscall_id);
 }

@@ -335,6 +335,10 @@ impl MemorySet {
             false
         }
     }
+    /// 判断某段虚拟地址是否在这段地址空间里
+    pub fn is_in(){
+
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 /// 逻辑段，一段实际可用的地址连续的虚拟地址空间
