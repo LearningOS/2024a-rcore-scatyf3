@@ -2,7 +2,6 @@
 use crate::mm::VirtAddr;
 use crate::mm::page_table::translated_ptr;
 use crate::task::{append_memory_to_cur_task_memspace, current_user_token, get_current_task, unmap_memory_to_cur_task_space};
-use crate::timer::get_time_ms;
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
@@ -77,12 +76,18 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ? TODO
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info");
-    let mut task = get_current_task();
-    task.time = get_time_ms() - task.time;
+    let task = get_current_task();
+    trace!("task time is {}",task.time); // 距离任务第一次被调度时刻的时长
+    trace!("task status is {:?}",task.status);
+    trace!("task syscall times is {:?}",task.syscall_times);
     let _ti = translated_ptr(current_user_token(), _ti as usize) as *mut TaskInfo;
-    unsafe { 
-        *_ti = task;
-    };
+    unsafe {
+        *_ti = TaskInfo {
+            status: task.status,
+            syscall_times: task.syscall_times,
+            time: task.time,
+        };
+    }
 
     return 0;
 }

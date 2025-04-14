@@ -83,6 +83,8 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
+        next_task.start_time = get_time_ms();
+        trace!("next task start time = {}",next_task.start_time);
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -144,6 +146,10 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            if inner.tasks[next].start_time==0{
+                trace!("next task start time = {}",get_time_ms());
+                inner.tasks[next].start_time = get_time_ms();
+            }
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -162,16 +168,19 @@ impl TaskManager {
     pub fn get_task_info(&self) -> TaskInfo {
         let inner = self.inner.exclusive_access();
         let current_task = &inner.tasks[inner.current_task];
+        trace!("current task start time is {}",current_task.start_time);
+        trace!("cur time is {}",get_time_ms());
         TaskInfo {
             status: current_task.task_status, 
             syscall_times: current_task.syscall_times,
-            time: current_task.start_time - get_time_ms(),
+            time: get_time_ms() - current_task.start_time,
         }
     }
     /// update task info according to current task
     pub fn update_task_info(&self, syscall_id:usize){
         let mut inner = self.inner.exclusive_access();
         let current_idx = inner.current_task;
+        // inner.tasks[current_idx].start_time = get_time_ms();
         inner.tasks[current_idx].syscall_times[syscall_id]+=1;
         trace!("current syscall_times_id = {}",inner.tasks[current_idx].syscall_times[syscall_id]);
         info!("update taskinfo on current task = {} , syscall_id = {}, syscall times = {}",inner.current_task,syscall_id,inner.tasks[current_idx].syscall_times[syscall_id]);
