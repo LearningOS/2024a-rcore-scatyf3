@@ -187,20 +187,23 @@ impl TaskManager {
         perm.set(MapPermission::W, _port & 0x2 != 0);
         perm.set(MapPermission::X, _port & 0x4 != 0);
         perm.set(MapPermission::U, true);
-        if inner.tasks[index].memory_set.insert_framed_area(_start, _end,perm){
-            return 0;
-        }else{
+        trace!("append memory {:?}:{:?} to cur task space",_start,_end);
+        // check这段内存是否已经被映射
+        if inner.tasks[index].memory_set.check_map_area_overlap(_start, _end) {
             return -1;
         }
-
+        inner.tasks[index].memory_set.insert_framed_area(_start, _end,perm);
+        return 0;
     }
     /// 从当前的内存空间里删除一段完整的内存区域
     pub fn unmap_memory_to_cur_task_space(&self,_start: VirtAddr,_end: VirtAddr) -> isize {
         // 使用 UPSafeCell 获取可变引用
         let mut inner = self.inner.exclusive_access();
         let index = inner.current_task;
-        // TODO ，start是新的end，但原内存的start在哪里
-        if inner.tasks[index].memory_set.remove_map_area(_start){
+        trace!("unmap memory {:?}:{:?} to cur task space",_start,_end);
+        // 必须全部overlap，才能 unmap
+        if inner.tasks[index].memory_set.check_map_area_equal(_start, _end){
+            inner.tasks[index].memory_set.remove_map_area(_start);
             return 0;
         }else{
             return -1;

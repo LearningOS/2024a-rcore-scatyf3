@@ -76,6 +76,26 @@ impl MemorySet {
             None,
         );
     }
+    /// 检查当前地址空间内是否有于某个逻辑段重合的逻辑段
+    pub fn check_map_area_overlap(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        // 通过遍历当前地址空间内的逻辑段 areas 来检查是否有与传入的逻辑段重合的逻辑段
+        for area in &self.areas {
+            if area.is_overlapping(start_va, end_va){
+                return true;
+            }
+        }
+        return false;
+    }
+    /// 检查是不是全部overlap
+    pub fn check_map_area_equal(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        // 通过遍历当前地址空间内的逻辑段 areas 来检查是否有与传入的逻辑段重合的逻辑段
+        for area in &self.areas {
+            if area.is_equal(start_va, end_va){
+                return true;
+            }
+        }
+        return false;
+    }
     /// push 方法可以在当前地址空间插入一个新的逻辑段 map_area 
     /// 如果它是以 Framed 方式映射到 物理内存，
     /// 还可以可选地在那些被映射到的物理页帧上写入一些初始化数据 data
@@ -473,6 +493,26 @@ impl MapArea {
             // current_vpn递增
             current_vpn.step();
         }
+    }
+    /// 判断有无重合
+    /// 但这里要不要用等号呢？
+    pub fn is_overlapping(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        let start_vpn: VirtPageNum = start.floor();
+        let end_vpn: VirtPageNum = end.ceil();
+        if self.vpn_range.get_start() < end_vpn && start_vpn < self.vpn_range.get_end() {
+            trace!("overlapping! [{:?}:{:?}] <-> [{:?}:{:?}]", start, end, self.vpn_range.get_start(), self.vpn_range.get_end());
+            return true;
+        }
+        false
+    }
+    pub fn is_equal(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        let start_vpn: VirtPageNum = start.floor();
+        let end_vpn: VirtPageNum = end.ceil();
+        if self.vpn_range.get_start() == start_vpn && end_vpn == self.vpn_range.get_end() {
+            trace!("equal! [{:?}:{:?}] <-> [{:?}:{:?}]", start, end, self.vpn_range.get_start(), self.vpn_range.get_end());
+            return true;
+        }
+        false
     }
 }
 
