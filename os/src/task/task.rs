@@ -12,6 +12,7 @@ use core::cell::RefMut;
 /// Task control block structure
 ///
 /// Directly save the contents that will not change during running
+/// 基于任务，增加进程控制的功能
 pub struct TaskControlBlock {
     // Immutable
     /// Process identifier

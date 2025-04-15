@@ -50,3 +50,38 @@ $ git checkout ch<Number>
 $ cd ci-user
 $ make test CHAPTER=<Number>
 ```
+
+
+```
+ 1├── os
+ 2   ├── build.rs(修改：基于应用名的应用构建器)
+ 3   ├── ...
+ 4   └── src
+ 5       ├── ...
+ 6       ├── loader.rs(修改：基于应用名的应用加载器)
+ 7       ├── main.rs(修改)
+ 8       ├── mm(修改：为了支持本章的系统调用对此模块做若干增强)
+ 9       │   ├── address.rs
+10       │   ├── frame_allocator.rs
+11       │   ├── heap_allocator.rs
+12       │   ├── memory_set.rs
+13       │   ├── mod.rs
+14       │   └── page_table.rs
+15       ├── syscall
+16       │   ├── fs.rs(修改：新增 sys_read)
+17       │   ├── mod.rs(修改：新的系统调用的分发处理)
+18       │   └── process.rs（修改：新增 sys_getpid/fork/exec/waitpid）
+19       ├── task
+20       │   ├── context.rs
+21       │   ├── manager.rs(新增：任务管理器，为上一章任务管理器功能的一部分)
+22       │   ├── mod.rs(修改：调整原来的接口实现以支持进程)
+23       │   ├── pid.rs(新增：进程标识符和内核栈的 Rust 抽象)
+24       │   ├── processor.rs(新增：处理器管理结构 ``Processor`` ，为上一章任务管理器功能的一部分)
+25       │   ├── switch.rs
+26       │   ├── switch.S
+27       │   └── task.rs(修改：支持进程机制的任务控制块)
+28       └── trap
+29           ├── context.rs
+30           ├── mod.rs(修改：对于系统调用的实现进行修改以支持进程系统调用)
+31           └── trap.S
+```

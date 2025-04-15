@@ -1,4 +1,5 @@
 //! Loading user applications into memory
+//! 这里是加载器，把应用加载到内存中
 
 /// Get the total number of applications.
 use alloc::vec::Vec;
@@ -29,13 +30,14 @@ pub fn get_app_data(app_id: usize) -> &'static [u8] {
 
 lazy_static! {
     ///All of app's name
+    /// 我们用一个全局可见的 只读 向量 APP_NAMES 来按照顺序将所有应用的名字保存在内存中
     static ref APP_NAMES: Vec<&'static str> = {
         let num_app = get_num_app();
         extern "C" {
             fn _app_names();
         }
         let mut start = _app_names as usize as *const u8;
-        let mut v = Vec::new();
+        let mut v = Vec::new(); // 这里是名称向量
         unsafe {
             for _ in 0..num_app {
                 let mut end = start;
@@ -44,7 +46,7 @@ lazy_static! {
                 }
                 let slice = core::slice::from_raw_parts(start, end as usize - start as usize);
                 let str = core::str::from_utf8(slice).unwrap();
-                v.push(str);
+                v.push(str); // push 切出来的app名称
                 start = end.add(1);
             }
         }
@@ -54,6 +56,7 @@ lazy_static! {
 
 #[allow(unused)]
 ///get app data from name
+/// 使用全局可见的 只读 向量 APP_NAMES，从名称获得elf数据
 pub fn get_app_data_by_name(name: &str) -> Option<&'static [u8]> {
     let num_app = get_num_app();
     (0..num_app)
@@ -61,6 +64,7 @@ pub fn get_app_data_by_name(name: &str) -> Option<&'static [u8]> {
         .map(get_app_data)
 }
 ///list all apps
+/// 在内核初始化时被调用，它可以打印出所有可用应用的名字
 pub fn list_apps() {
     println!("/**** APPS ****");
     for app in APP_NAMES.iter() {

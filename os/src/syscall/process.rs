@@ -47,27 +47,39 @@ pub fn sys_getpid() -> isize {
     trace!("kernel: sys_getpid pid:{}", current_task().unwrap().pid.0);
     current_task().unwrap().pid.0 as isize
 }
-
+/// 功能：由当前进程 fork 出一个子进程。
+/// 返回值：对于子进程返回 0，对于当前进程则返回子进程的 PID 。
+/// syscall ID：220
 pub fn sys_fork() -> isize {
     trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
-    let current_task = current_task().unwrap();
-    let new_task = current_task.fork();
+    let current_task = current_task().unwrap(); // 获取当前任务
+    let new_task = current_task.fork(); // 从当前任务fork
     let new_pid = new_task.pid.0;
     // modify trap context of new_task, because it returns immediately after switching
+    // 新任务的context
     let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
+    // 修改context，让子进程返回0
     trap_cx.x[10] = 0;
     // add new task to scheduler
+    // 增加新任务到调度器
     add_task(new_task);
+    // 在本进程，返回新进程的pid
     new_pid as isize
 }
-
+/// 功能：将当前进程的地址空间清空并加载一个特定的可执行文件，返回用户态后开始它的执行。
+/// 参数：字符串 path 给出了要加载的可执行文件的名字；
+/// 返回值：如果出错的话（如找不到名字相符的可执行文件）则返回 -1，否则不应该返回。
+/// 注意：path 必须以 "\0" 结尾，否则内核将无法确定其长度
+/// syscall ID：221
+/// 记得OSTEP说fork+exec就是shell的雏形...
 pub fn sys_exec(path: *const u8) -> isize {
     trace!("kernel:pid[{}] sys_exec", current_task().unwrap().pid.0);
-    let token = current_user_token();
-    let path = translated_str(token, path);
+    let token = current_user_token(); //当前进程的地址访问相关 aka token
+    let path = translated_str(token, path); // 要加载的可执行文件的名字
     if let Some(data) = get_app_data_by_name(path.as_str()) {
+        // path有效，执行
         let task = current_task().unwrap();
         task.exec(data);
         0
@@ -78,6 +90,12 @@ pub fn sys_exec(path: *const u8) -> isize {
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
+/// 功能：当前进程等待一个子进程变为僵尸进程，回收其全部资源并收集其返回值。
+/// 参数：pid 表示要等待的子进程的进程 ID，如果为 -1 的话表示等待任意一个子进程；
+/// exit_code 表示保存子进程返回值的地址，如果这个地址为 0 的话表示不必保存。
+/// 返回值：如果要等待的子进程不存在则返回 -1；否则如果要等待的子进程均未结束则返回 -2；
+/// 否则返回结束的子进程的进程 ID。
+/// syscall ID：260
 pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     trace!("kernel::pid[{}] sys_waitpid [{}]", current_task().unwrap().pid.0, pid);
     let task = current_task().unwrap();
@@ -114,10 +132,42 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     // ---- release current PCB automatically
 }
 
+/*
+// user/src/lib.rs
+// sys_waitpid 在用户库中被封装成两个不同的 API，它们实现的策略是如果子进程还未结束，就以 yield 让出时间片
+// 前者用于等待任意一个子进程
+pub fn wait(exit_code: &mut i32) -> isize {
+    loop {
+        match sys_waitpid(-1, exit_code as *mut _) {
+            -2 => {
+                sys_yield();
+            }
+            n => {
+                return n;
+            }
+        }
+    }
+}
+// 后者用于等待特定子进程
+pub fn waitpid(pid: usize, exit_code: &mut i32) -> isize {
+    loop {
+        match sys_waitpid(pid as isize, exit_code as *mut _) {
+            -2 => {
+                sys_yield();
+            }
+            n => {
+                return n;
+            }
+        }
+    }
+}
+
+*/
+
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+pub fn sys_get_time(_ts: *mut TimfeVal, _tz: usize) -> isize {
     trace!(
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
