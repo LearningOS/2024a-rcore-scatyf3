@@ -1,25 +1,18 @@
 //! Process management syscalls
-<<<<<<< HEAD
 use alloc::sync::Arc;
 
 use crate::{
     config::MAX_SYSCALL_NUM,
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{VirtAddr,translated_refmut, translated_str},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next, TaskStatus,
+        suspend_current_and_run_next, TaskStatus,append_memory_to_cur_task_memspace,get_current_task,unmap_memory_to_cur_task_space
     },
-=======
-use crate::mm::VirtAddr;
-use crate::mm::page_table::translated_ptr;
-use crate::task::{append_memory_to_cur_task_memspace, current_user_token, get_current_task, unmap_memory_to_cur_task_space};
-use crate::{
-    config::MAX_SYSCALL_NUM,
-    task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus},
     timer::get_time_us,
->>>>>>> 6e97132 (map/unmap初稿)
 };
+use crate::mm::page_table::translated_ptr;
+
 
 #[repr(C)]
 #[derive(Debug)]
@@ -32,11 +25,11 @@ pub struct TimeVal {
 #[allow(dead_code)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
-    status: TaskStatus,
+    pub status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
     /// Total running time of task
-    time: usize,
+    pub time: usize,
 }
 
 /// task exits and submit an exit code
@@ -261,23 +254,6 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
 
 }
 
-/// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
-}
-
-/// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
-}
 
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

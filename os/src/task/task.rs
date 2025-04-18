@@ -1,10 +1,12 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::{trap_handler, TrapContext};
+use crate::syscall::process::TaskInfo;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
@@ -39,6 +41,7 @@ impl TaskControlBlock {
 }
 
 /// 任务控制块内部
+/// 从ch4 -> ch5，我们把大部分内容搬到inner，为什么？
 pub struct TaskControlBlockInner {
     /// The physical page number of the frame where the trap context is placed
     /// 应用地址空间中的 Trap 上下文被放在的物理页帧的物理页号
@@ -82,6 +85,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// start time
+    pub start_time: usize,
+
+    /// syscall_times
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
 }
 
 // 注意我们在维护父子进程关系的时候大量用到了智能指针 Arc/Weak ，
@@ -143,6 +152,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    start_time: get_time_ms(),
+                    syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         };
@@ -222,6 +233,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    start_time: get_time_ms(),
+                    syscall_times: [0; MAX_SYSCALL_NUM],
                 })
             },
         });
@@ -266,6 +279,56 @@ impl TaskControlBlock {
             Some(old_break)
         } else {
             None
+        }
+    }
+    /// get inner control block
+    pub fn get_task_info(&self) -> TaskInfo {
+        let inner = self.inner.exclusive_access();
+        trace!("current task start time is {}",inner.start_time);
+        trace!("cur time is {}",get_time_ms());
+        TaskInfo {
+            status: inner.task_status, 
+            syscall_times: inner.syscall_times,
+            time: get_time_ms() - inner.start_time,
+        }
+    }
+    /// update task info according to current task
+    pub fn update_task_info(&self, syscall_id:usize){
+        let mut inner = self.inner.exclusive_access();
+        // inner.tasks[current_idx].start_time = get_time_ms();
+        inner.syscall_times[syscall_id]+=1;
+        trace!("current syscall_times_id = {}",inner.syscall_times[syscall_id]);
+        info!("update taskinfo on current task PID TODO , syscall_id = {}, syscall times = {}",syscall_id,inner.syscall_times[syscall_id]);
+    }
+    /// 对当前的任务，增加一段虚拟内存空间
+    pub fn append_memory_to_cur_task_memspace(&self,_start: VirtAddr,_end: VirtAddr, _port: usize) -> isize {
+        // 使用 UPSafeCell 获取可变引用
+        let mut inner = self.inner.exclusive_access();
+        trace!("_port={}", _port);
+        let mut perm = MapPermission::empty();
+        perm.set(MapPermission::R, _port & 0x1 != 0);
+        perm.set(MapPermission::W, _port & 0x2 != 0);
+        perm.set(MapPermission::X, _port & 0x4 != 0);
+        perm.set(MapPermission::U, true);
+        trace!("append memory {:?}:{:?} to cur task space",_start,_end);
+        // check这段内存是否已经被映射
+        if inner.memory_set.check_map_area_overlap(_start, _end) {
+            return -1;
+        }
+        inner.memory_set.insert_framed_area(_start, _end,perm);
+        return 0;
+    }
+    /// 从当前的内存空间里删除一段完整的内存区域
+    pub fn unmap_memory_to_cur_task_space(&self,_start: VirtAddr,_end: VirtAddr) -> isize {
+        // 使用 UPSafeCell 获取可变引用
+        let mut inner = self.inner.exclusive_access();
+        trace!("unmap memory {:?}:{:?} to cur task space",_start,_end);
+        // 必须全部overlap，才能 unmap
+        if inner.memory_set.check_map_area_equal(_start, _end){
+            inner.memory_set.remove_map_area(_start);
+            return 0;
+        }else{
+            return -1;
         }
     }
 }

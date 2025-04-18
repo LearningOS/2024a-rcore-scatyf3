@@ -41,12 +41,12 @@ const SYSCALL_SPAWN: usize = 400;
 const SYSCALL_TASK_INFO: usize = 410;
 
 mod fs;
-mod process;
+pub(crate) mod process;
 
 use fs::*;
 use process::*;
+use crate::task::manager::update_task_info;
 
-use crate::task::update_task_info;
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
     update_task_info(syscall_id);
