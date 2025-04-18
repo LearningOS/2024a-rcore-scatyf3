@@ -30,6 +30,7 @@ pub struct TaskInfo {
 }
 
 /// task exits and submit an exit code
+/// 应用调用 sys_exit 系统调用主动退出，或者出错由内核终止之后
 pub fn sys_exit(exit_code: i32) -> ! {
     trace!("kernel:pid[{}] sys_exit", current_task().unwrap().pid.0);
     exit_current_and_run_next(exit_code);
@@ -37,6 +38,7 @@ pub fn sys_exit(exit_code: i32) -> ! {
 }
 
 /// current task gives up resources for other tasks
+/// 暂停当前任务，并切换到下一个任务
 pub fn sys_yield() -> isize {
     trace!("kernel:pid[{}] sys_yield", current_task().unwrap().pid.0);
     suspend_current_and_run_next();
@@ -51,6 +53,8 @@ pub fn sys_getpid() -> isize {
 /// 返回值：对于子进程返回 0，对于当前进程则返回子进程的 PID 。
 /// syscall ID：220
 pub fn sys_fork() -> isize {
+    // 在调用 sys_fork 之前，我们已经将当前进程 Trap 上下文中的 sepc 向后移动了 4 字节，使得它回到用户态之后会从 ecall 的下一条指令开始执行
+    // （这在哪里可以看到）
     trace!("kernel:pid[{}] sys_fork", current_task().unwrap().pid.0);
     let current_task = current_task().unwrap(); // 获取当前任务
     let new_task = current_task.fork(); // 从当前任务fork
@@ -61,7 +65,11 @@ pub fn sys_fork() -> isize {
     // we do not have to move to next instruction since we have done it before
     // for child process, fork returns 0
     // 修改context，让子进程返回0
+    // 第 8~11 行我们将子进程的 Trap 上下文中用来存放系统调用返回值的 a0 寄存器修改为 0 ，
+    // 而父进程系统调用的返回值会在 syscall 返回之后再设置为 sys_fork 的返回值。
+    // 这就做到了父进程 fork 的返回值为子进程的 PID ，而子进程的返回值为 0。
     trap_cx.x[10] = 0;
+
     // add new task to scheduler
     // 增加新任务到调度器
     add_task(new_task);

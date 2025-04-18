@@ -13,11 +13,16 @@ use alloc::sync::Arc;
 use lazy_static::*;
 
 /// Processor management structure
+/// 处理器管理结构 Processor 负责维护从任务管理器 TaskManager 分离出去的那部分 CPU 状态
 pub struct Processor {
     ///The task currently executing on the current processor
+    /// 处理器上正在执行的任务
     current: Option<Arc<TaskControlBlock>>,
 
     ///The basic control flow of each core, helping to select and switch process
+    /// 表示当前处理器上的 idle 控制流的任务上下文的地址 ?
+    /// context: 每个 Processor 都有一个 idle 控制流，
+    /// 它们运行在每个核各自的启动栈上，功能是尝试从任务管理器中选出一个任务来在当前核上执行。
     idle_task_cx: TaskContext,
 }
 
@@ -36,11 +41,13 @@ impl Processor {
     }
 
     ///Get current task in moving semanteme
+    /// 取出正在执行的任务，意味着current 字段也变为 None(为啥)
     pub fn take_current(&mut self) -> Option<Arc<TaskControlBlock>> {
         self.current.take()
     }
 
     ///Get current task in cloning semanteme
+    /// 返回当前执行的任务的一份拷贝
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
@@ -52,9 +59,11 @@ lazy_static! {
 
 ///The main part of process execution and scheduling
 ///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
+/// 在内核初始化完毕之后，核通过调用 run_tasks 函数来进入 idle 控制流
 pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
+        // 它循环调用 fetch_task 直到顺利从任务管理器中取出一个任务
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
             // access coming task TCB exclusively
@@ -67,6 +76,7 @@ pub fn run_tasks() {
             processor.current = Some(task);
             // release processor manually
             drop(processor);
+            // 然后获得 __switch 两个参数进行任务切换
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
@@ -87,12 +97,14 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 }
 
 /// Get the current user token(addr of page table)
+///  基于 current_task 实现，提供当前正在执行的任务的更多信息
 pub fn current_user_token() -> usize {
     let task = current_task().unwrap();
     task.get_user_token()
 }
 
 ///Get the mutable reference to trap context of current task
+///  基于 current_task 实现，提供当前正在执行的任务的更多信息
 pub fn current_trap_cx() -> &'static mut TrapContext {
     current_task()
         .unwrap()
@@ -101,10 +113,13 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 }
 
 ///Return to idle control flow for new scheduling
+/// 当一个应用交出 CPU 使用权时，进入内核后它会调用 schedule 函数来切换到 idle 控制流并开启新一轮的任务调度。
+/// 回忆一些ostep内容，这是非常古老的os调度方法，它假设每个进程都是善意的，开发者要手动交还控制权限...
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     let mut processor = PROCESSOR.exclusive_access();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     drop(processor);
+    // 从当前切换到 idle 控制流
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }

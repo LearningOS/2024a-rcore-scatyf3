@@ -234,11 +234,21 @@ impl MemorySet {
         )
     }
     /// Create a new address space by copy code&data from a exited process's address space.
+    /// 
     pub fn from_existed_user(user_space: &Self) -> Self {
+        // 通过 new_bare 新创建一个空的地址空间
         let mut memory_set = Self::new_bare();
         // map trampoline
+        // 为这个地址空间映射上跳板页面，
+        // 这是因为我们解析 ELF 创建地址空间的时候，并没有将跳板页作为一个单独的逻辑段插入到地址空间的逻辑段向量 areas 中，
+        // 所以这里需要单独映射上。
         memory_set.map_trampoline();
         // copy data sections/trap_context/user_stack
+        // 剩下的逻辑段都包含在 areas 中。我们遍历原地址空间中的所有逻辑段，
+        // 将复制之后的逻辑段插入新的地址空间， 在插入的时候就已经实际分配了物理页帧了。
+        // 接着我们遍历逻辑段中的每个虚拟页面，对应完成数据复制， 
+        // 这只需要找出两个地址空间中的虚拟页面各被映射到哪个物理页帧，
+        // 就可转化为将数据从物理内存中的一个位置复制到另一个位置，使用 copy_from_slice 即可轻松实现。
         for area in user_space.areas.iter() {
             let new_area = MapArea::from_another(area);
             memory_set.push(new_area, None);
@@ -325,6 +335,9 @@ impl MapArea {
             map_perm,
         }
     }
+    // fork需要，为子进程创建一个和父进程几乎完全相同的地址空间
+    // 从一个逻辑段复制得到一个虚拟地址区间、映射方式和权限控制均相同的逻辑段， 
+    // 不同的是由于它还没有真正被映射到物理页帧上，所以 data_frames 字段为空
     pub fn from_another(another: &Self) -> Self {
         Self {
             vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),

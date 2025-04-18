@@ -30,18 +30,23 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
 pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     trace!("kernel:pid[{}] sys_read", current_task().unwrap().pid.0);
     match fd {
+        // 仅支持从标准输入 FD_STDIN 即文件描述符 0 读入，且每次只能读入一个字符
         FD_STDIN => {
             assert_eq!(len, 1, "Only support len = 1 in sys_read!");
             let mut c: usize;
             loop {
+                // 这是利用 sbi 提供的接口 console_getchar 实现的
                 c = console_getchar();
                 if c == 0 {
+                    // 如果还没有输入，我们就切换到其他进程，等下次切换回来时再看看是否有输入了。 
                     suspend_current_and_run_next();
                     continue;
                 } else {
+                    // 取到输入后就退出循环
                     break;
                 }
             }
+            // 并手动查页表将输入字符正确写入到应用地址空间。
             let ch = c as u8;
             let mut buffers = translated_byte_buffer(current_user_token(), buf, len);
             unsafe {

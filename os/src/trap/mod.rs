@@ -63,11 +63,14 @@ pub fn trap_handler() -> ! {
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             // jump to next instruction anyway
+
             let mut cx = current_trap_cx();
-            cx.sepc += 4;
+            cx.sepc += 4; // +4 从ecall后面执行
             // get system call return value
             let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
             // cx is changed during sys_exec, so we have to call it again
+            // 对于系统调用 sys_exec 来说，调用它之后， 
+            // trap_handler 原来上下文中的 cx 失效了，因为它是就原来的地址空间而言的。
             cx = current_trap_cx();
             cx.x[10] = result as usize;
         }
@@ -84,6 +87,7 @@ pub fn trap_handler() -> ! {
                 current_trap_cx().sepc,
             );
             // page fault exit code
+            // 带有一个退出码作为参数
             exit_current_and_run_next(-2);
         }
         Trap::Exception(Exception::IllegalInstruction) => {
@@ -93,6 +97,7 @@ pub fn trap_handler() -> ! {
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             set_next_trigger();
+            // 时间片算法？SupervisorTimer到，运行下一个任务...
             suspend_current_and_run_next();
         }
         _ => {
